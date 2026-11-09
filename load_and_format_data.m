@@ -11,25 +11,29 @@ function [XTrain, TTrain, XValid, TValid, XTest] = load_and_format_data(dataLoca
     TTrain = trainingImages.Labels;
     TValid = validationImages.Labels;
     
-    % on redimensionne les images 
-    trainingImagesResized = augmentedImageDatastore(imageSize, trainingImages);
-    validationImagesResized = augmentedImageDatastore(imageSize, validationImages);
+    % on charge les images redimensionnées dans des tableaux 4D
+    XTrain = readImagesToArray(trainingImages, imageSize);
+    XValid = readImagesToArray(validationImages, imageSize);
     
-    % on récupère les images redimensionnées (readall renvoie une table dont la colonne '.input' contient les images) et on remet les data en dimension 4d ([Ligne du pixel, Colonne du pixel, Couleur R/G/B, Numéro de l'image])
-    trainingData = readall(trainingImagesResized);
-    validationData = readall(validationImagesResized);
-    
-    XTrain = cat(4, trainingData.input{:});
-    XValid = cat(4, validationData.input{:});
-
     % on récupère les images de test
     testPath = fullfile(dataLocation, 'test');
     testImages = imageDatastore(testPath, "IncludeSubfolders", true);
     
-    % on veut les images de test en 224x224
-    testImagesResized = augmentedImageDatastore(imageSize, testImages);
-    
-    testData = readall(testImagesResized);
-    XTest = cat(4, testData.input{:});
+    XTest = readImagesToArray(testImages, imageSize);
 
+end
+
+function X = readImagesToArray(imds, imageSize)
+    n = numel(imds.Files);
+    X = zeros([imageSize 3 n], "uint8");
+    augds = augmentedImageDatastore(imageSize, imds, ColorPreprocessing="gray2rgb");
+    augds.MiniBatchSize = 64;
+    k = 0;
+    while hasdata(augds)
+        batch = read(augds);
+        for i = 1:numel(batch.input)
+            k = k + 1;
+            X(:,:,:,k) = batch.input{i};
+        end
+    end
 end

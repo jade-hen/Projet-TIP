@@ -1,0 +1,68 @@
+clear; clc; close all;
+
+%% 1. Chargement du modele pré-entrainé
+numClasses = 11;
+modelName  = "mobilenetv2";
+net = imagePretrainedNetwork(modelName, NumClasses=numClasses);
+
+% taille d'entrée attendue par le réseau (299x299 pour inceptionv3)
+inputSize = net.Layers(1).InputSize;
+imageSize = inputSize(1:2);
+
+%% 2. Chargement et formatage des données 
+dataLocation = "food-11";   % contient les sous-dossiers "train" et "test"
+trainPart    = 0.8;         % 80 % entrainement, 20 % validation
+
+cacheFile = "food11_" + imageSize(1) + ".mat";
+
+if isfile(cacheFile)
+    load(cacheFile, "XTrain", "TTrain", "XValid", "TValid", "XTest");
+else
+    [XTrain, TTrain, XValid, TValid, XTest] = ...
+        load_and_format_data(dataLocation, imageSize, trainPart);
+    save(cacheFile, "XTrain", "TTrain", "XValid", "TValid", "XTest", "-v7.3");
+end
+
+classNames = categories(TTrain);
+
+%% 3. Options d'entraînement
+options = trainingOptions("adam", ...
+    InitialLearnRate=1e-4, ...
+    MaxEpochs=8, ...
+    MiniBatchSize=16, ...
+    Shuffle="every-epoch", ...
+    ValidationData={XValid, TValid}, ...
+    ValidationFrequency=50, ...
+    Metrics="accuracy", ...
+    Plots="training-progress", ...
+    Verbose=false);
+
+%% 4. Entraînement (images en tableau 4D + étiquettes catégorielles)
+trainedNet = trainnet(XTrain, TTrain, net, "crossentropy", options);
+
+%% 5. Evaluation sur la validation
+scoresVal = minibatchpredict(trainedNet, XValid);
+YVal = scores2label(scoresVal, classNames);
+accuracy = mean(YVal == TValid);
+fprintf("Precision sur la validation : %.2f %%\n", accuracy*100);
+
+figure
+confusionchart(TValid, YVal);
+title("Matrice de confusion (validation)");
+
+%% 6. Predictions sur le jeu de test + export JSON 
+% (les predictions sont calculees a l'interieur de export_results_test)
+export_results_test(trainedNet, XTest, classNames);
+
+% apercu de quelques images de test avec leur prediction
+YTest = scores2label(minibatchpredict(trainedNet, XTest), classNames);
+figure
+idx = randperm(size(XTest, 4), 9);
+for k = 1:9
+    subplot(3, 3, k)
+    imshow(XTest(:,:,:,idx(k)))
+    title(string(YTest(idx(k))))
+end
+
+%% 7. Sauvegarde
+save("food11_trainedNet.mat", "trainedNet", "classNames");
