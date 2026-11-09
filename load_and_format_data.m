@@ -1,7 +1,8 @@
-function [XTrain, TTrain, XValid, TValid] = load_and_format_data(dataLocation, imageSize, trainPart)
+function [XTrain, TTrain, XValid, TValid, XTest] = load_and_format_data(dataLocation, imageSize, trainPart)
     
-    % on récupère les images
-    images = imageDatastore(dataLocation, "IncludeSubfolders", true, 'LabelSource','foldernames');
+    % on récupère les images d'entraînement
+    trainPath = fullfile(dataLocation, 'train');
+    images = imageDatastore(trainPath, "IncludeSubfolders", true, 'LabelSource','foldernames');
     
     % on en prend certaines pour l'entraînement et d'autres pour la validation
     [trainingImages, validationImages] = splitEachLabel(images, trainPart, 'randomized');
@@ -20,5 +21,15 @@ function [XTrain, TTrain, XValid, TValid] = load_and_format_data(dataLocation, i
     
     XTrain = cat(4, trainingData.input{:});
     XValid = cat(4, validationData.input{:});
+
+    % on récupère les images de test
+    testPath = fullfile(dataLocation, 'test');
+    testImages = imageDatastore(testPath, "IncludeSubfolders", true);
+    
+    % on veut les images de test en 224x224
+    testImagesResized = augmentedImageDatastore(imageSize, testImages);
+    
+    testData = readall(testImagesResized);
+    XTest = cat(4, testData.input{:});
 
 end
