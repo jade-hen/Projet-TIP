@@ -32,4 +32,6 @@ function [XTrain, TTrain, XValid, TValid, XTest] = load_and_format_data(dataLoca
     testData = readall(testImagesResized);
     XTest = cat(4, testData.input{:});
 
+    fprintf('Récupération des données terminée\n');
+
 end

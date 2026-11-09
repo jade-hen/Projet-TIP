@@ -22,10 +22,10 @@ function export_results_test(net, XTest, classNames)
             %"2": "fried",
             %"3": "bread",
     % }
-    resultsStruct = cell2struct(cellstr(testResults), cellstr(num));
+    resultsDict = dictionary(num, testResults);
 
     % on passe au format json avec PrettyPrint=true pour avoir les sauts de lignes et indentations comme le modèle
-    jsonString = jsonencode(resultsStruct, PrettyPrint=true);
+    jsonString = jsonencode(resultsDict, PrettyPrint=true);
 
     % on ouvre/crée le fichier en mode écriture
     fid = fopen(jsonFileName, 'w');
