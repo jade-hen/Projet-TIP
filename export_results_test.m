@@ -1,4 +1,10 @@
-function export_results_test(labelsTestPred)
+function export_results_test(net, XTest, classNames)
+
+    % on récupère les résultats (proba pour chaque classe)
+    testResults = minibatchpredict(net, XTest);
+
+    % on déduit les labels (prend celle de la proba la + élevée)
+    labelsTestPred = scores2label(testResults, classNames);
 
     % choix du nom de fichier résultats
     jsonFileName = 'test_results.json';
