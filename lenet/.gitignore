@@ -1,0 +1,10 @@
+# Fichiers créés par macOS et par Excel (fichier de verrou ~$...)
+.DS_Store
+~$*
+
+# Fichiers créés par MATLAB (sauvegardes automatiques, variables enregistrées)
+*.asv
+*.mat
+
+# Tableau de suivi des essais : fichier binaire, interdit dans le rendu
+resultats_lenet.xlsx
