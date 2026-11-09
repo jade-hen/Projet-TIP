@@ -8,6 +8,10 @@ food-11/
 *.asv
 slprj/
 
+# résultats
+*.json
+*.png
+
 # Système
 .DS_Store
 Thumbs.db
