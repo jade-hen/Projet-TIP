@@ -1,4 +1,4 @@
-function [XTrain, TTrain, XValid, TValid, XTest] = load_and_format_data(dataLocation, imageSize, trainPart)
+function [XTrain, TTrain, XValid, TValid, XTest, testNames] = load_and_format_data(dataLocation, imageSize, trainPart)
     
     % on récupère les images d'entraînement
     trainPath = fullfile(dataLocation, 'train');
@@ -26,12 +26,15 @@ function [XTrain, TTrain, XValid, TValid, XTest] = load_and_format_data(dataLoca
     testPath = fullfile(dataLocation, 'test');
     testImages = imageDatastore(testPath, "IncludeSubfolders", true);
     
-    % on veut les images de test en 224x224
     testImagesResized = augmentedImageDatastore(imageSize, testImages);
     
     testData = readall(testImagesResized);
     XTest = cat(4, testData.input{:});
 
+     % on récupère les noms des images sans le chemin ni l'extension (.jpg)
+    [~, testNames, ~] = cellfun(@fileparts, testImages.Files, 'UniformOutput', false);
+
+   
     fprintf('Récupération des données terminée\n');
 
 end
