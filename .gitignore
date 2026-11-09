@@ -1,0 +1,13 @@
+# Dataset (ne jamais pousser)
+food-11/
+*.zip
+
+# Fichiers binaires MATLAB
+*.mat
+*.fig
+*.asv
+slprj/
+
+# Système
+.DS_Store
+Thumbs.db
