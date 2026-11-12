@@ -13,14 +13,14 @@
 %   E4  = E3 + augmentation de données
 
 %% 0. Réglages de l'expérience (la seule section à modifier)
-nomExperience = "E1_fc_seule";  % nom libre, recopié dans le tableau des résultats
-modeGel       = "fc";           % "fc" | "res5" | "aucun" (voir ci-dessus)
+nomExperience = "E3_complet";  % nom libre, recopié dans le tableau des résultats
+modeGel       = "aucun";           % "fc" | "res5" | "aucun" (voir ci-dessus)
 augmentation  = false;          % true : flips, rotations, zooms aléatoires à chaque époque
-nbEpoques     = 3;
-learnRate     = 1e-3;           % 1e-3 pour "fc" ; 1e-4 pour "res5" et "aucun"
+nbEpoques     = 6;
+learnRate     = 1e-4;           % 1e-3 pour "fc" ; 1e-4 pour "res5" et "aucun"
 tailleBatch   = 32;
-testRapide    = true;           % true : 500 images, 1 époque, rien n'est enregistré (vérification + chrono)
-exporterTest  = false;          % true : écrit test_results.json (seulement pour le meilleur réseau)
+testRapide    = false;           % true : 500 images, 1 époque, rien n'est enregistré (vérification + chrono)
+exporterTest  = true;          % true : écrit test_results.json (seulement pour le meilleur réseau)
 
 %% 1. Données (chargées une seule fois, puis gardées en mémoire et dans le cache .mat)
 imageSize    = [224 224];       % taille d'entrée de ResNet-18
@@ -30,13 +30,14 @@ fichierCache = 'food11_224.mat';
 if ~exist('XTrain', 'var')      % déjà en mémoire ? alors on ne recharge pas
     if isfile(fichierCache)
         fprintf('Chargement depuis %s...\n', fichierCache);
-        load(fichierCache, 'XTrain', 'TTrain', 'XValid', 'TValid', 'XTest', 'testNames');
+        load(fichierCache, 'XTrain', 'TTrain', 'XValid', 'TValid');
     else
         rng(0);                 % même découpage train/validation à chaque fois
-        [XTrain, TTrain, XValid, TValid, XTest, testNames] = ...
+        [XTrain, TTrain, XValid, TValid] = ...
             load_and_format_data(fullfile('food-11'), imageSize, trainPart);
-        save(fichierCache, 'XTrain', 'TTrain', 'XValid', 'TValid', 'XTest', 'testNames', '-v7.3');
+        save(fichierCache, 'XTrain', 'TTrain', 'XValid', 'TValid', '-v7.3');
     end
+    % Les images de test ne sont pas mises en cache : elles ne servent qu'à l'export JSON (section 5)
 end
 classNames = categories(TTrain);
 
@@ -166,6 +167,10 @@ end
 save("resnet18_" + nomExperience + ".mat", "trainedNet", "classNames");
 
 % Prédictions du test pour le serveur d'évaluation (meilleur réseau seulement)
+% Les images de test sont lues directement depuis le disque, redimensionnées à la volée.
 if exporterTest
-    export_results_test(trainedNet, XTest, testNames, classNames);
+    imdsTest  = imageDatastore(fullfile('food-11', 'test'));
+    dsTest    = augmentedImageDatastore(imageSize, imdsTest, ColorPreprocessing="gray2rgb");
+    [~, testNames] = cellfun(@fileparts, imdsTest.Files, 'UniformOutput', false);   % "0", "1", ...
+    export_results_test(trainedNet, dsTest, testNames, classNames);   % minibatchpredict accepte un datastore
 end
