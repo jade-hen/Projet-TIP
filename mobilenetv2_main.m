@@ -5,41 +5,44 @@ numClasses = 11;
 modelName  = "mobilenetv2";
 net = imagePretrainedNetwork(modelName, NumClasses=numClasses);
 
-% taille d'entrée attendue par le réseau (299x299 pour inceptionv3)
+% taille d'entrée attendue par le réseau (224x224 pour mobilenetv2)
 inputSize = net.Layers(1).InputSize;
 imageSize = inputSize(1:2);
 
-%% 2. Chargement et formatage des données 
+%% 2. Chargement et formatage des données
 dataLocation = "food-11";   % contient les sous-dossiers "train" et "test"
 trainPart    = 0.8;         % 80 % entrainement, 20 % validation
+rng(42);                     % même découpage à chaque fois
 
-cacheFile = "food11_" + imageSize(1) + ".mat";
-
+% le nom du cache dépend de la taille ET du découpage
+cacheFile = "food11_" + imageSize(1) + "_" + round(trainPart*100) + ".mat";
 if isfile(cacheFile)
-    load(cacheFile, "XTrain", "TTrain", "XValid", "TValid", "XTest");
+    load(cacheFile, "XTrain", "TTrain", "XValid", "TValid", "XTest", "testNames");
 else
-    [XTrain, TTrain, XValid, TValid, XTest] = ...
+    [XTrain, TTrain, XValid, TValid, XTest, testNames] = ...
         load_and_format_data(dataLocation, imageSize, trainPart);
-    save(cacheFile, "XTrain", "TTrain", "XValid", "TValid", "XTest", "-v7.3");
+    save(cacheFile, "XTrain", "TTrain", "XValid", "TValid", "XTest", "testNames", "-v7.3");
 end
-
 classNames = categories(TTrain);
 
 %% 3. Options d'entraînement
+miniBatchSize = 16;
+itersPerEpoch = floor(size(XTrain,4) / miniBatchSize);
+
 options = trainingOptions("adam", ...
-    InitialLearnRate=1e-4, ...
-    MaxEpochs=1, ...
-    MiniBatchSize=16, ...
+    InitialLearnRate=1e-3, ...
+    MaxEpochs=5, ...                         
+    MiniBatchSize=miniBatchSize, ...
     Shuffle="every-epoch", ...
     ValidationData={XValid, TValid}, ...
-    ValidationFrequency=50, ...
+    ValidationFrequency=itersPerEpoch, ...   
     Metrics="accuracy", ...
     Plots="training-progress", ...
-    Verbose=false);
+    Verbose=true, VerboseFrequency=50);
 
 %% 4. Entraînement (images en tableau 4D + étiquettes catégorielles)
 trainedNet = trainnet(XTrain, TTrain, net, "crossentropy", options);
-
+fprintf("Nombre de paramètres : %.2f M\n", sum(cellfun(@numel, trainedNet.Learnables.Value)) / 1e6);
 %% 5. Evaluation sur la validation
 scoresVal = minibatchpredict(trainedNet, XValid);
 YVal = scores2label(scoresVal, classNames);
@@ -50,15 +53,9 @@ figure
 confusionchart(TValid, YVal);
 title("Matrice de confusion (validation)");
 
-%% 6. Predictions sur le jeu de test + export JSON 
+%% 6. Predictions sur le jeu de test + export JSON
 % (les predictions sont calculees a l'interieur de export_results_test)
-export_results_test(trainedNet, XTest, classNames);
-
-tic;
-netTest = trainnet(XTrain(:,:,:,idx), TTrain(idx), net, "crossentropy", optionsTest);
-t = toc;
-fprintf('500 images : %.0f s  ->  estimation 1 époque complète : %.0f min\n', ...
-        t, t / 500 * size(XTrain,4) / 60);
+export_results_test(trainedNet, XTest, testNames, classNames);
 
 % apercu de quelques images de test avec leur prediction
 YTest = scores2label(minibatchpredict(trainedNet, XTest), classNames);
