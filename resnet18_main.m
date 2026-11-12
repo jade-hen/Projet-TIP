@@ -43,7 +43,7 @@ classNames = categories(TTrain);
 
 % Données réellement utilisées pour l'entraînement (sous-ensemble en test rapide)
 if testRapide
-    rng(1);
+    rng(42);
     idx = randperm(size(XTrain, 4), 500);
     XTr = XTrain(:, :, :, idx);  TTr = TTrain(idx);
     nbEpoques = 1;
