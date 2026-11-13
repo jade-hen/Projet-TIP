@@ -10,17 +10,21 @@
 %   E1  modeGel = "fc"    -> seule la dernière couche apprend (= configuration du prof)
 %   E2  modeGel = "res5"  -> dernier bloc résiduel + dernière couche
 %   E3  modeGel = "aucun" -> fine-tuning complet
-%   E4  = E3 + augmentation de données
+%   E4  = E3 + régularisation L2 plus forte (remède le moins coûteux contre le surapprentissage)
+%   E5  = E3 + augmentation de données (seulement si E4 surapprend encore)
 
 %% 0. Réglages de l'expérience (la seule section à modifier)
-nomExperience = "E3_complet";  % nom libre, recopié dans le tableau des résultats
+nomExperience = "E5_complet_L2_augm";  % nom libre, recopié dans le tableau des résultats
 modeGel       = "aucun";           % "fc" | "res5" | "aucun" (voir ci-dessus)
-augmentation  = false;          % true : flips, rotations, zooms aléatoires à chaque époque
+augmentation  = true;          % true : flips, rotations, zooms aléatoires à chaque époque
+regulL2       = 1e-3;           % régularisation L2 (1e-4 = valeur par défaut de MATLAB ; 1e-3 pour E4)
 nbEpoques     = 6;
 learnRate     = 1e-4;           % 1e-3 pour "fc" ; 1e-4 pour "res5" et "aucun"
 tailleBatch   = 32;
 testRapide    = false;           % true : 500 images, 1 époque, rien n'est enregistré (vérification + chrono)
 exporterTest  = true;          % true : écrit test_results.json (seulement pour le meilleur réseau)
+afficherCourbes = true;        % false conseillé pour les longs entraînements : la fenêtre de progression peut
+                                % se figer (« Graphics timeout »). Les courbes sont tracées après coup par trace_courbes.m
 
 %% 1. Données (chargées une seule fois, puis gardées en mémoire et dans le cache .mat)
 imageSize    = [224 224];       % taille d'entrée de ResNet-18
@@ -43,7 +47,7 @@ classNames = categories(TTrain);
 
 % Données réellement utilisées pour l'entraînement (sous-ensemble en test rapide)
 if testRapide
-    rng(42);
+    rng(1);
     idx = randperm(size(XTrain, 4), 500);
     XTr = XTrain(:, :, :, idx);  TTr = TTrain(idx);
     nbEpoques = 1;
@@ -94,6 +98,7 @@ fprintf('Paramètres : %d au total (%.2f M), dont %d entraînables (%.2f M)\n', 
 
 %% 3. Entraînement
 iterParEpoque = ceil(size(XTr, 4) / tailleBatch);
+if afficherCourbes, modeAffichage = "training-progress"; else, modeAffichage = "none"; end
 options = trainingOptions("adam", ...
     InitialLearnRate=learnRate, ...
     MaxEpochs=nbEpoques, ...
@@ -102,19 +107,20 @@ options = trainingOptions("adam", ...
     LearnRateSchedule="piecewise", ...          % learning rate divisé par 10 pour la dernière époque
     LearnRateDropPeriod=max(1, nbEpoques - 1), ...
     LearnRateDropFactor=0.1, ...
+    L2Regularization=regulL2, ...
     ValidationData={XValid, TValid}, ...
     ValidationFrequency=iterParEpoque, ...      % une validation par époque (coûteuse sur CPU)
     Metrics="accuracy", ...
-    Plots="training-progress", ...
+    Plots=modeAffichage, ...
     Verbose=true, VerboseFrequency=20);
 
 tic;
 if augmentation
     aug = imageDataAugmenter(RandXReflection=true, RandRotation=[-15 15], RandScale=[0.9 1.1]);
     donneesTrain = augmentedImageDatastore(imageSize, XTr, TTr, DataAugmentation=aug);
-    trainedNet = trainnet(donneesTrain, net, "crossentropy", options);
+    [trainedNet, info] = trainnet(donneesTrain, net, "crossentropy", options);
 else
-    trainedNet = trainnet(XTr, TTr, net, "crossentropy", options);
+    [trainedNet, info] = trainnet(XTr, TTr, net, "crossentropy", options);
 end
 dureeMin = toc / 60;
 
@@ -130,12 +136,20 @@ f1        = 2 * precision .* rappel ./ (precision + rappel);
 f1(isnan(f1)) = 0;                          % classe jamais prédite -> F1 = 0
 
 accuracy  = mean(YValid == TValid);
-f1Macro   = mean(f1);
-frugalite = f1Macro - 0.3 / (1 + 1e6 / nbParams);   % formule du sujet, paramètres en millions
+f1Macro   = mean(f1);                       % moyenne simple des F1 par classe
+
+% F1 calculé comme le serveur d'évaluation : précision et rappel moyens pondérés par
+% l'inverse de la fréquence de chaque classe (poids normalisés), puis moyenne harmonique.
+poids     = (1 ./ sum(C, 2)) / sum(1 ./ sum(C, 2));
+precPond  = sum(poids .* precision, 'omitnan');
+rappPond  = sum(poids .* rappel);
+f1Serveur = 2 * precPond * rappPond / (precPond + rappPond);
+
+frugalite = f1Serveur - 0.3 / (1 + 1e6 / nbParams);   % formule du sujet, paramètres en millions
 
 disp(table(classNames, precision, rappel, f1, VariableNames=["classe", "precision", "rappel", "F1"]));
-fprintf('%s : accuracy = %.4f | F1 macro = %.4f | frugalité estimée = %.4f | %.1f min\n', ...
-    nomExperience, accuracy, f1Macro, frugalite, dureeMin);
+fprintf('%s : accuracy = %.4f | F1 macro = %.4f | F1 (calcul du serveur) = %.4f | frugalité estimée = %.4f | %.1f min\n', ...
+    nomExperience, accuracy, f1Macro, f1Serveur, frugalite, dureeMin);
 
 fig = figure;
 cm = confusionchart(TValid, YValid, ColumnSummary="column-normalized", RowSummary="row-normalized");
@@ -153,9 +167,9 @@ end
 exportgraphics(fig, "confusion_resnet18_" + nomExperience + ".png");
 
 ligne = table(string(datetime("now")), nomExperience, modeGel, double(augmentation), nbEpoques, ...
-    learnRate, tailleBatch, nbParams/1e6, nbParamsEntrainables/1e6, dureeMin, accuracy, f1Macro, frugalite, ...
+    learnRate, tailleBatch, nbParams/1e6, nbParamsEntrainables/1e6, dureeMin, accuracy, f1Macro, frugalite, f1Serveur, regulL2, ...
     VariableNames=["date", "experience", "gel", "augmentation", "epoques", "lr", "batch", ...
-                   "params_M", "params_entrainables_M", "duree_min", "accuracy", "F1_macro", "frugalite"]);
+                   "params_M", "params_entrainables_M", "duree_min", "accuracy", "F1_macro", "frugalite", "F1_serveur", "L2"]);
 fichierRes = "resultats_resnet18.csv";
 if isfile(fichierRes)
     writetable(ligne, fichierRes, WriteMode="append", WriteVariableNames=false);
@@ -164,7 +178,11 @@ else
 end
 
 % Réseau entraîné (fichier .mat : ignoré par git, à ne pas rendre)
-save("resnet18_" + nomExperience + ".mat", "trainedNet", "classNames");
+save("resnet18_" + nomExperience + ".mat", "trainedNet", "classNames", "info");
+
+% Historique d'entraînement (texte, versionnable) pour tracer les courbes du rapport avec trace_courbes.m
+writetable(info.TrainingHistory,   "historique_train_" + nomExperience + ".csv");
+writetable(info.ValidationHistory, "historique_valid_" + nomExperience + ".csv");
 
 % Prédictions du test pour le serveur d'évaluation (meilleur réseau seulement)
 % Les images de test sont lues directement depuis le disque, redimensionnées à la volée.

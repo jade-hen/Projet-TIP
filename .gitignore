@@ -11,6 +11,7 @@ slprj/
 # résultats
 *.json
 *.png
+*.csv
 
 # Système
 .DS_Store
