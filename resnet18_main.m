@@ -7,7 +7,7 @@ regulL2         = 1e-3;
 nbEpoques       = 6;
 learnRate       = 1e-4;
 tailleBatch     = 32;
-testRapide      = false;       % si true alors 500 images et 1 époque, pour vérifier que le script fonctionne
+testRapide      = true;       % si true alors 500 images et 1 époque, pour vérifier que le script fonctionne
 exporterTest    = true;        % si true alors écrit test_results_<nomExperience>.json
 afficherCourbes = true;        % fenêtre Training Progress de MATLAB
 
@@ -16,13 +16,13 @@ imageSize    = [224 224];      % taille d'entrée de ResNet-18
 trainPart    = 0.85;           % 85 % entraînement, 15 % validation
 fichierCache = 'food11_224.mat';
 
-if ~exist('XTrain', 'var')
+if ~exist('XTest', 'var')
     if isfile(fichierCache)
-        load(fichierCache, 'XTrain', 'TTrain', 'XValid', 'TValid');
+        load(fichierCache, 'XTrain', 'TTrain', 'XValid', 'TValid', 'XTest', 'testNames');
     else
         rng(0);                % même découpage à chaque fois
-        [XTrain, TTrain, XValid, TValid] = load_and_format_data('food-11', imageSize, trainPart);
-        save(fichierCache, 'XTrain', 'TTrain', 'XValid', 'TValid', '-v7.3');
+        [XTrain, TTrain, XValid, TValid, XTest, testNames] = load_and_format_data('food-11', imageSize, trainPart);
+        save(fichierCache, 'XTrain', 'TTrain', 'XValid', 'TValid', 'XTest', 'testNames', '-v7.3');
     end
 end
 classNames = categories(TTrain);
@@ -143,16 +143,12 @@ frugalite = f1Serveur - 0.3 / (1 + 1e6 / nbParams);
 fprintf('%s : accuracy = %.4f | F1 macro = %.4f | F1 serveur = %.4f | frugalité = %.4f | %.1f min\n', ...
     nomExperience, accuracy, f1Macro, f1Serveur, frugalite, dureeMin);
 
-fig = figure;
-cm = confusionchart(TValid, YValid, ColumnSummary="column-normalized", RowSummary="row-normalized");
-cm.Title = "ResNet-18 " + strrep(nomExperience, "_", " ") + " (validation)";
-
 if testRapide
     return                      % si test rapide alors aucun fichier enregistré
 end
 
 %% 5. Enregistrement des résultats
-exportgraphics(fig, "confusion_resnet18_" + nomExperience + ".png");
+confusion_matrix(trainedNet, XValid, TValid, "confusion_resnet18_" + nomExperience + ".png");
 
 ligne = table(string(datetime("now")), nomExperience, modeGel, double(augmentation), nbEpoques, ...
     learnRate, tailleBatch, nbParams/1e6, nbParamsEntrainables/1e6, dureeMin, accuracy, f1Macro, ...
@@ -173,10 +169,7 @@ writetable(info.ValidationHistory, "historique_valid_" + nomExperience + ".csv")
 
 % Prédictions sur le jeu de test pour le serveur d'évaluation
 if exporterTest
-    imdsTest = imageDatastore(fullfile('food-11', 'test'));
-    dsTest   = augmentedImageDatastore(imageSize, imdsTest, ColorPreprocessing="gray2rgb");
-    [~, testNames] = cellfun(@fileparts, imdsTest.Files, 'UniformOutput', false);
-    export_results_test(trainedNet, dsTest, testNames, classNames);
+    export_results_test(trainedNet, XTest, testNames, classNames);
     movefile('test_results.json', "test_results_" + nomExperience + ".json");
     fprintf('Prédictions du test : test_results_%s.json (%.6f M paramètres à déclarer)\n', ...
         nomExperience, nbParams/1e6);
