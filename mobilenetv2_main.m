@@ -1,10 +1,10 @@
 clear; clc; close all;
 
 %% 0. Paramètres de l'expérience 
-nomExp       = "E5";   % nom de l'expérience
-dossierSortie = "resultats_E5";    % dossier résultats
+nomExp       = "E3";   % nom de l'expérience
+dossierSortie = "resultats_E3_v2";    % dossier résultats
 mode         = "ft";    % "ft" = fine-tuning complet | "gel" = couches figées 
-augmentation = false;   % true = augmentation de données 
+augmentation = true;   % true = augmentation de données 
 nbEpochs     = 5;
 l2       = 1e-4;    % régularisation L2 (1e-4 par défaut ; 1e-3 pour plus forte)
 patience = Inf;     % arrêt anticipé : ex. 3 = stop si la validation ne s'améliore pas 3 fois de suite | Inf = l'entraînement va jusqu'au bout
@@ -113,8 +113,8 @@ precPond  = sum(poids .* precision, 'omitnan');
 rappPond  = sum(poids .* rappel);
 f1Serveur = 2 * precPond * rappPond / (precPond + rappPond);
 
-% Score de frugalité du sujet : Frug = P - w / (1 + 1/R)
-%   P = F1, w = 0.3, R = nombre de paramètres EN MILLIONS
+% Score de frugalité: Frug = P - w / (1 + 1/R)
+%   P = F1, w = 0.3, R = nombre de paramètres en millions
 
 w = 0.3;
 R = nbParams / 1e6;
@@ -166,7 +166,7 @@ fichierCourbe = fullfile(dossierSortie, nomExp + "_courbe.png");
 exportgraphics(figC, fichierCourbe, "Resolution", 200);
 close(figC);
 
-% --- Matrice de confusion (validation) ---
+% --- Matrice de confusion ---
 figM = figure("Visible", "off", "Position", [100 100 800 700]);
 cc = confusionchart(figM, TValid, YValid);
 cc.Title = "Matrice de confusion (validation) - " + nomExp;
@@ -178,18 +178,8 @@ close(figM);
 
 fprintf("Graphiques enregistrés : %s et %s\n", fichierCourbe, fichierConf);
 
-%% 9. Predictions sur le jeu de test + export JSON
+%% 9. export JSON
 export_results_test(trainedNet, XTest, testNames, classNames);
-
-% apercu de quelques images de test avec leur prediction
-YTest = scores2label(minibatchpredict(trainedNet, XTest), classNames);
-figure
-idx = randperm(size(XTest, 4), 9);
-for k = 1:9
-    subplot(3, 3, k)
-    imshow(XTest(:,:,:,idx(k)))
-    title(string(YTest(idx(k))))
-end
 
 %% 10. Sauvegarde
 save("food11_trainedNet_" + nomExp + ".mat", "trainedNet", "classNames");
