@@ -22,7 +22,7 @@ function [XTrain, TTrain, XValid, TValid, XTest, testNames] = load_and_format_da
 
     XTest = readImagesToArray(testImages, imageSize);
 
-    % on récupère les noms des images sans le chemin ni l'extension (.jpg)
+    % on récupère les noms des images sans le chemin ni l'extension
     [~, testNames, ~] = cellfun(@fileparts, testImages.Files, 'UniformOutput', false);
 
    
